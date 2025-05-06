@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Impulso Escolar - Quiz Educacional</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Impulso Escolar</h1>
+        
+        <div class="config-section">
+            <div class="input-group">
+                <label for="topic">Tema:</label>
+                <input type="text" id="topic" placeholder="Digite o tema do quiz">
+            </div>
+            
+            <div class="level-display">
+                <span>Nível atual:</span>
+                <span id="current-level">1</span>
+            </div>
+            
+            <button id="start-btn">Iniciar Quiz</button>
+        </div>
+        
+        <div class="quiz-container" id="quiz-container">
+            <div class="question-card">
+                <div id="question-text">A pergunta aparecerá aqui...</div>
+                
+                <div class="options-container">
+                    <button class="option-btn" id="option0">Opção 1</button>
+                    <button class="option-btn" id="option1">Opção 2</button>
+                    <button class="option-btn" id="option2">Opção 3</button>
+                    <button class="option-btn" id="option3">Opção 4</button>
+                </div>
+            </div>
+            
+            <div id="feedback" class="feedback"></div>
+            <div id="loading" class="loading">Carregando pergunta...</div>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
