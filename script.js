@@ -1,11 +1,15 @@
 class QuizGame {
     constructor() {
         this.currentLevel = 1;
+        this.apiKey = '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';
+        this.model = 'deepseek/deepseek-chat-v3-0324:free';
         this.questionElement = document.getElementById('question-text');
         this.optionsButtons = document.querySelectorAll('.option-btn');
         this.levelDisplay = document.getElementById('current-level');
         this.levelAnimation = document.getElementById('level-animation');
         this.currentQuestion = null;
+        this.currentCorrect = null;
+        this.isLoading = false;
 
         this.setupEventListeners();
         this.loadNewQuestion();
@@ -17,190 +21,145 @@ class QuizGame {
         });
     }
 
-    async translateText(text) {
-        try {
-            const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pt&dt=t&q=${encodeURIComponent(text)}`);
-            const data = await response.json();
-            return data[0][0][0];
-        } catch (error) {
-            return text;
+    async fetchQuestion(level) {
+        const prompt = `Gere uma questão de múltipla escolha para o ${level}º ano do ensino fundamental brasileiro, com 4 alternativas e apenas uma correta. Responda exatamente neste formato:\nPergunta: ...\nA) ...\nB) ...\nC) ...\nD) ...\nResposta correta: ...\nNão repita o enunciado na resposta correta. Não explique, apenas siga o formato.`;
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${this.apiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: this.model,
+                messages: [
+                    { role: 'user', content: prompt }
+                ],
+                temperature: 0.7,
+                max_tokens: 300
+            })
+        });
+        if (!response.ok) {
+            throw new Error('Erro ao buscar questão da IA.');
         }
+        const data = await response.json();
+        return data.choices[0].message.content;
     }
 
-    getWikipediaQuestion(level) {
-        // Converte o nível (1-10) para uma query de dificuldade apropriada
-        const difficulty = level <= 3 ? 'fácil' : level <= 7 ? 'médio' : 'avançado';
-
-        return fetch(`https://pt.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=extracts&exintro&explaintext&generator=random&grnnamespace=0&grnlimit=5&grncontinue=`)
-            .then(response => response.json())
-            .then(async data => {
-                const pages = data.query.pages;
-                const page = Object.values(pages)[0];
-                const extract = page.extract;
-                return this.generateQuestionFromText(extract, level);
-            });
-    }
-
-    async generateQuestionFromText(text, level) {
-        if (!text) return this.getWikipediaQuestion(level);
-
-        text = text.replace(/\n/g, ' ').replace(/\([^)]*\)/g, '');
-
-        // Ajusta o tamanho das frases baseado no nível
-        const minLen = Math.max(10, level * 5);  // Nível 1: 10 caracteres, Nível 10: 50 caracteres
-        const maxLen = Math.min(50, level * 20); // Nível 1: 50 caracteres, Nível 10: 200 caracteres
-
-        const sentences = text.split('. ')
-            .filter(s => s.length >= minLen && s.length <= maxLen)
-            .filter(s => !s.includes('?') && !s.includes('!'))
-            .map(s => s.trim())
-            .filter(s => s.length > 0);
-
-        if (sentences.length === 0) {
-            return this.getWikipediaQuestion(level);
+    parseQuestion(raw) {
+        // Limpar qualquer texto antes de 'Pergunta:' e depois de 'Resposta correta:'
+        const perguntaMatch = raw.match(/Pergunta:(.*?)(A\)|A\))/is);
+        let pergunta = '';
+        let opcoes = [];
+        let resposta = '';
+        const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+        for (let line of lines) {
+            if (line.toLowerCase().startsWith('pergunta:')) {
+                pergunta = line.replace(/pergunta:/i, '').trim();
+            } else if (/^[A-D]\)/i.test(line)) {
+                opcoes.push(line.replace(/^[A-D]\)\s*/i, ''));
+            } else if (line.toLowerCase().startsWith('resposta correta:')) {
+                resposta = line.replace(/resposta correta:/i, '').trim();
+            }
         }
-
-        const randomSentence = sentences[Math.floor(Math.random() * sentences.length)];
-        const words = randomSentence.split(' ');
-
-        // Filtra palavras baseado no nível
-        const minWordLength = Math.max(3, Math.min(level, 5));
-        const maxWordLength = Math.min(8, level * 2);
-
-        const importantWords = words.filter(w =>
-            w.length >= minWordLength &&
-            w.length <= maxWordLength &&
-            /^[a-zA-ZÀ-ÿ]+$/.test(w)
-        );
-
-        if (importantWords.length < 4) {
-            return this.getWikipediaQuestion(level);
+        // Tornar resposta robusta: aceitar 'Letra C', 'Alternativa B', 'Opção D', 'C', 'c', etc.
+        let idx = -1;
+        let letra = resposta.match(/[A-Da-d]/);
+        if (letra) {
+            idx = letra[0].toUpperCase().charCodeAt(0) - 65;
+        } else {
+            // Procurar pelo texto da alternativa
+            for (let i = 0; i < opcoes.length; i++) {
+                if (opcoes[i].toLowerCase().trim() === resposta.toLowerCase().trim()) {
+                    idx = i;
+                    break;
+                }
+            }
+            // fallback: se não achou, tenta por similaridade
+            if (idx === -1) {
+                idx = opcoes.findIndex(opt => opt.toLowerCase().includes(resposta.toLowerCase()));
+            }
         }
-
-        const wordToAsk = importantWords[Math.floor(Math.random() * importantWords.length)];
-        const question = randomSentence.replace(wordToAsk, '_____');
-
-        const incorrectOptions = importantWords
-            .filter(w => w !== wordToAsk)
-            .sort(() => Math.random() - 0.5)
-            .slice(0, 3);
-
         return {
-            question: `Complete a frase: ${question}`,
-            correct_answer: wordToAsk,
-            incorrect_answers: incorrectOptions
+            pergunta,
+            opcoes,
+            correta: idx
         };
     }
 
-    async getTriviaQuestion(level) {
-        try {
-            // Converte o nível 1-10 para as dificuldades da API
-            const difficulty = level <= 3 ? 'easy' : level <= 7 ? 'medium' : 'hard';
-            const response = await fetch(`https://opentdb.com/api.php?amount=1&difficulty=${difficulty}&type=multiple`);
-            const data = await response.json();
-
-            if (data.results && data.results.length > 0) {
-                const question = data.results[0];
-
-                // Simplifica a pergunta para níveis mais baixos
-                let translatedQuestion = await this.translateText(question.question);
-                if (level <= 3) {
-                    translatedQuestion = translatedQuestion
-                        .replace(/Qual dos seguintes/i, 'Qual')
-                        .replace(/Qual das seguintes/i, 'Qual')
-                        .replace(/Qual destas opções/i, 'Qual')
-                        .replace(/Qual dessas opções/i, 'Qual');
-                }
-
-                const translatedCorrectAnswer = await this.translateText(question.correct_answer);
-                const translatedIncorrectAnswers = await Promise.all(
-                    question.incorrect_answers.map(answer => this.translateText(answer))
-                );
-
-                return {
-                    question: translatedQuestion,
-                    correct_answer: translatedCorrectAnswer,
-                    incorrect_answers: translatedIncorrectAnswers
-                };
-            }
-        } catch (error) {
-            console.error('Erro ao buscar pergunta do Trivia:', error);
-        }
-
-        return this.getWikipediaQuestion(level);
-    }
-
     async loadNewQuestion() {
+        this.isLoading = true;
+        this.questionElement.textContent = "Carregando pergunta...";
+        this.optionsButtons.forEach(btn => {
+            btn.textContent = "...";
+            btn.disabled = true;
+            btn.classList.remove('correct', 'incorrect');
+        });
         try {
-            // Alterna entre as fontes de perguntas
-            const sources = [
-                () => this.getWikipediaQuestion(this.currentLevel),
-                () => this.getTriviaQuestion(this.currentLevel)
-            ];
-            const randomSource = sources[Math.floor(Math.random() * sources.length)];
-            this.currentQuestion = await randomSource();
+            const raw = await this.fetchQuestion(this.currentLevel);
+            const parsed = this.parseQuestion(raw);
+            if (!parsed.pergunta || parsed.opcoes.length !== 4 || parsed.correta === -1) {
+                throw new Error('Pergunta inválida gerada pela IA.');
+            }
+            this.currentQuestion = parsed;
+            this.currentCorrect = parsed.correta;
             this.displayQuestion();
         } catch (error) {
-            console.error('Erro ao carregar pergunta:', error);
-            this.loadNewQuestion();
+            this.questionElement.textContent = `Erro ao carregar pergunta: ${error.message}`;
+            this.currentQuestion = null;
+            this.currentCorrect = null;
         }
+        this.isLoading = false;
     }
 
     displayQuestion() {
-        this.questionElement.textContent = this.currentQuestion.question;
-        const answers = [
-            this.currentQuestion.correct_answer,
-            ...this.currentQuestion.incorrect_answers
-        ].sort(() => Math.random() - 0.5);
-        this.optionsButtons.forEach((button, index) => {
-            button.textContent = answers[index];
-            button.className = 'option-btn';
+        this.levelDisplay.textContent = this.currentLevel;
+        this.questionElement.textContent = this.currentQuestion.pergunta;
+        this.optionsButtons.forEach((button, idx) => {
+            button.textContent = this.currentQuestion.opcoes[idx] || '---';
+            button.disabled = false;
+            button.classList.remove('correct', 'incorrect');
         });
     }
 
-    async handleAnswer(event) {
+    handleAnswer(event) {
+        if (this.isLoading || !this.currentQuestion) return;
         const selectedButton = event.target;
-        const selectedAnswer = selectedButton.textContent;
-        const correctAnswer = this.currentQuestion.correct_answer;
+        const idx = Array.from(this.optionsButtons).indexOf(selectedButton);
         this.optionsButtons.forEach(btn => btn.disabled = true);
-        this.optionsButtons.forEach(button => {
-            if (button.textContent === correctAnswer) {
-                button.classList.add('correct');
-            } else if (button === selectedButton) {
-                button.classList.add('incorrect');
-            }
-        });
-        const isCorrect = selectedAnswer === correctAnswer;
-        await this.updateLevel(isCorrect);
+        if (idx === this.currentCorrect) {
+            selectedButton.classList.add('correct');
+            this.updateLevel(true);
+        } else {
+            selectedButton.classList.add('incorrect');
+            this.optionsButtons[this.currentCorrect].classList.add('correct');
+            this.updateLevel(false);
+        }
         setTimeout(() => {
-            this.optionsButtons.forEach(btn => {
-                btn.disabled = false;
-                btn.classList.remove('correct', 'incorrect');
-            });
+            this.optionsButtons.forEach(btn => btn.classList.remove('correct', 'incorrect'));
             this.loadNewQuestion();
-        }, 2000);
+        }, 1800);
     }
 
-    async updateLevel(isCorrect) {
+    updateLevel(acertou) {
         const oldLevel = this.currentLevel;
-        if (isCorrect && this.currentLevel < 10) {
+        if (acertou && this.currentLevel < 10) {
             this.currentLevel++;
-        } else if (!isCorrect && this.currentLevel > 1) {
+        } else if (!acertou && this.currentLevel > 1) {
             this.currentLevel--;
         }
         if (oldLevel !== this.currentLevel) {
-            this.showLevelAnimation(isCorrect);
+            this.showLevelAnimation(acertou);
         }
         this.levelDisplay.textContent = this.currentLevel;
     }
 
-    showLevelAnimation(isUp) {
+    showLevelAnimation(subiu) {
         const levelText = this.levelAnimation.querySelector('.level-text');
-        levelText.textContent = isUp ? '⬆️ Subiu de Nível!' : '⬇️ Desceu de Nível!';
+        levelText.textContent = subiu ? '⬆️ Subiu de Nível!' : '⬇️ Desceu de Nível!';
         this.levelAnimation.classList.add('show');
         setTimeout(() => {
             this.levelAnimation.classList.remove('show');
-        }, 2000);
+        }, 1500);
     }
 }
 
