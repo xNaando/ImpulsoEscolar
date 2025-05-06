@@ -1,7 +1,6 @@
 class QuizGame {
     constructor() {
         this.currentLevel = 1;
-        this.apiKey = '2FE72131-122C-45C7-9ACF-42CA5CA3306757621934DED837-E9CF-4F7A-8391-82E46AF3C199';
         this.questionElement = document.getElementById('question-text');
         this.optionsButtons = document.querySelectorAll('.option-btn');
         this.levelDisplay = document.getElementById('current-level');
@@ -9,16 +8,6 @@ class QuizGame {
         this.currentQuestion = null;
         this.currentCorrect = null;
         this.isLoading = false;
-
-        // Iniciar SDK da Astica
-        if (typeof asticaAPI_start === 'function') {
-            asticaAPI_start(this.apiKey);
-        } else {
-            // Caso o SDK ainda não tenha carregado
-            document.addEventListener('asticaAPIReady', () => {
-                asticaAPI_start(this.apiKey);
-            });
-        }
 
         this.setupEventListeners();
         this.loadNewQuestion();
@@ -30,19 +19,17 @@ class QuizGame {
         });
     }
 
-    fetchQuestion(level) {
-        return new Promise((resolve, reject) => {
-            const prompt = `Gere uma questão de múltipla escolha para o ${level}º ano do ensino fundamental brasileiro, com 4 alternativas e apenas uma correta. Responda neste formato: Pergunta: ... A) ... B) ... C) ... D) ... Resposta correta: ...`;
-            // Chama a IA da Astica
-            asticaGPT(prompt, 120);
-            window.asticaGPT_generateComplete = (data) => {
-                if (data && data.output) {
-                    resolve(data.output);
-                } else {
-                    reject(new Error('Erro ao buscar questão da IA.'));
-                }
-            };
+    async fetchQuestionFromBackend(prompt) {
+        const response = await fetch('https://impulso-escolar.vercel.app/api/pergunta', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt })
         });
+        const data = await response.json();
+        if (!data.choices || !data.choices[0] || !data.choices[0].message || !data.choices[0].message.content) {
+            throw new Error('Resposta inválida da IA.');
+        }
+        return data.choices[0].message.content;
     }
 
     parseQuestion(raw) {
@@ -104,7 +91,8 @@ class QuizGame {
             btn.classList.remove('correct', 'incorrect');
         });
         try {
-            const raw = await this.fetchQuestion(this.currentLevel);
+            const prompt = `Gere uma questão de múltipla escolha para o ${this.currentLevel}º ano do ensino fundamental brasileiro, com 4 alternativas e apenas uma correta. Responda neste formato: Pergunta: ... A) ... B) ... C) ... D) ... Resposta correta: ...`;
+            const raw = await this.fetchQuestionFromBackend(prompt);
             const parsed = this.parseQuestion(raw);
             if (!parsed.pergunta || parsed.opcoes.length !== 4 || parsed.correta === -1) {
                 throw new Error('Pergunta inválida gerada pela IA.');
