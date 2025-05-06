@@ -114,7 +114,7 @@ class QuizGame {
         `;
 
         // URL do backend
-        const backendUrl = 'https://impulso-escolar-backend.vercel.app/api/generate-question';
+        const backendUrl = 'https://impulso-escolar-gofemfbmp-fernandos-projects-a1576899.vercel.app/api/pergunta';
         
         const response = await fetch(backendUrl, {
             method: 'POST',

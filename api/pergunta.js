@@ -58,7 +58,7 @@ async function generateQuestion(req) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.API_KEY}`,
-        'HTTP-Referer': 'https://impulso-escolar.vercel.app', // Substitua pelo seu domínio
+        'HTTP-Referer': 'https://impulso-escolar-gofemfbmp-fernandos-projects-a1576899.vercel.app', // Domínio de deployment
         'X-Title': 'Impulso Escolar'
       },
       body: JSON.stringify({
