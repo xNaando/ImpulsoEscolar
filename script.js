@@ -79,10 +79,9 @@ class QuizGame {
             this.updateQuestionUI(questionData);
         } catch (error) {
             console.error('Erro ao buscar pergunta:', error);
-            
-            // Usar dados de teste em caso de erro
-            const testData = this.getTestQuestion(topic, this.currentLevel);
-            this.updateQuestionUI(testData);
+            this.questionText.textContent = 'Erro ao carregar a pergunta. Por favor, tente novamente.';
+            this.loadingElement.style.display = 'none';
+            return;
         } finally {
             this.loadingElement.style.display = 'none';
         }
@@ -134,36 +133,7 @@ class QuizGame {
         return await response.json();
     }
 
-    /**
-     * Gera uma pergunta de teste para quando o backend não estiver disponível
-     * @param {string} topic - O tema do quiz
-     * @param {number} level - O nível atual
-     * @returns {Object} - Dados da pergunta de teste
-     */
-    getTestQuestion(topic, level) {
-        // Perguntas de teste para diferentes temas
-        const testQuestions = [
-            {
-                question: `Pergunta de teste sobre ${topic} (Nível ${level}): Qual é a capital do Brasil?`,
-                options: ["Rio de Janeiro", "São Paulo", "Brasília", "Salvador"],
-                correctAnswerIndex: 2
-            },
-            {
-                question: `Pergunta de teste sobre ${topic} (Nível ${level}): Quanto é 2 + 2?`,
-                options: ["3", "4", "5", "6"],
-                correctAnswerIndex: 1
-            },
-            {
-                question: `Pergunta de teste sobre ${topic} (Nível ${level}): Qual é o maior planeta do Sistema Solar?`,
-                options: ["Terra", "Marte", "Júpiter", "Saturno"],
-                correctAnswerIndex: 2
-            }
-        ];
-        
-        // Selecionar uma pergunta aleatória
-        const randomIndex = Math.floor(Math.random() * testQuestions.length);
-        return testQuestions[randomIndex];
-    }
+
 
     /**
      * Atualiza a interface com a nova pergunta
