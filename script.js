@@ -1,15 +1,24 @@
 class QuizGame {
     constructor() {
         this.currentLevel = 1;
-        this.apiKey = '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';
-        this.model = 'deepseek/deepseek-chat-v3-0324:free';
+        this.apiKey = '2FE72131-122C-45C7-9ACF-42CA5CA3306757621934DED837-E9CF-4F7A-8391-82E46AF3C199';
         this.questionElement = document.getElementById('question-text');
         this.optionsButtons = document.querySelectorAll('.option-btn');
         this.levelDisplay = document.getElementById('current-level');
-        this.levelAnimation = document.getElementById('level-animation');
+        this.loadingOverlay = document.getElementById('loading-overlay');
         this.currentQuestion = null;
         this.currentCorrect = null;
         this.isLoading = false;
+
+        // Iniciar SDK da Astica
+        if (typeof asticaAPI_start === 'function') {
+            asticaAPI_start(this.apiKey);
+        } else {
+            // Caso o SDK ainda não tenha carregado
+            document.addEventListener('asticaAPIReady', () => {
+                asticaAPI_start(this.apiKey);
+            });
+        }
 
         this.setupEventListeners();
         this.loadNewQuestion();
@@ -21,33 +30,24 @@ class QuizGame {
         });
     }
 
-    async fetchQuestion(level) {
-        const prompt = `Gere uma questão de múltipla escolha para o ${level}º ano do ensino fundamental brasileiro, com 4 alternativas e apenas uma correta. Responda exatamente neste formato:\nPergunta: ...\nA) ...\nB) ...\nC) ...\nD) ...\nResposta correta: ...\nNão repita o enunciado na resposta correta. Não explique, apenas siga o formato.`;
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${this.apiKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                model: this.model,
-                messages: [
-                    { role: 'user', content: prompt }
-                ],
-                temperature: 0.7,
-                max_tokens: 300
-            })
+    fetchQuestion(level) {
+        return new Promise((resolve, reject) => {
+            const prompt = `Gere uma questão de múltipla escolha para o ${level}º ano do ensino fundamental brasileiro, com 4 alternativas e apenas uma correta. Responda neste formato: Pergunta: ... A) ... B) ... C) ... D) ... Resposta correta: ...`;
+            // Chama a IA da Astica
+            asticaGPT(prompt, 120);
+            window.asticaGPT_generateComplete = (data) => {
+                if (data && data.output) {
+                    resolve(data.output);
+                } else {
+                    reject(new Error('Erro ao buscar questão da IA.'));
+                }
+            };
         });
-        if (!response.ok) {
-            throw new Error('Erro ao buscar questão da IA.');
-        }
-        const data = await response.json();
-        return data.choices[0].message.content;
     }
 
     parseQuestion(raw) {
-        // Limpar qualquer texto antes de 'Pergunta:' e depois de 'Resposta correta:'
-        const perguntaMatch = raw.match(/Pergunta:(.*?)(A\)|A\))/is);
+        // Espera o formato:
+        // Pergunta: ...\nA) ...\nB) ...\nC) ...\nD) ...\nResposta correta: ...
         let pergunta = '';
         let opcoes = [];
         let resposta = '';
@@ -86,8 +86,17 @@ class QuizGame {
         };
     }
 
+    showLoading(show) {
+        if (show) {
+            this.loadingOverlay.classList.add('active');
+        } else {
+            this.loadingOverlay.classList.remove('active');
+        }
+    }
+
     async loadNewQuestion() {
         this.isLoading = true;
+        this.showLoading(true);
         this.questionElement.textContent = "Carregando pergunta...";
         this.optionsButtons.forEach(btn => {
             btn.textContent = "...";
@@ -109,6 +118,7 @@ class QuizGame {
             this.currentCorrect = null;
         }
         this.isLoading = false;
+        this.showLoading(false);
     }
 
     displayQuestion() {
@@ -141,25 +151,12 @@ class QuizGame {
     }
 
     updateLevel(acertou) {
-        const oldLevel = this.currentLevel;
         if (acertou && this.currentLevel < 10) {
             this.currentLevel++;
         } else if (!acertou && this.currentLevel > 1) {
             this.currentLevel--;
         }
-        if (oldLevel !== this.currentLevel) {
-            this.showLevelAnimation(acertou);
-        }
         this.levelDisplay.textContent = this.currentLevel;
-    }
-
-    showLevelAnimation(subiu) {
-        const levelText = this.levelAnimation.querySelector('.level-text');
-        levelText.textContent = subiu ? '⬆️ Subiu de Nível!' : '⬇️ Desceu de Nível!';
-        this.levelAnimation.classList.add('show');
-        setTimeout(() => {
-            this.levelAnimation.classList.remove('show');
-        }, 1500);
     }
 }
 
