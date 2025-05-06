@@ -20,7 +20,7 @@ class QuizGame {
     }
 
     async fetchQuestionFromBackend(prompt) {
-        const response = await fetch('https://impulso-escolar.vercel.app/api/pergunta', {
+        const response = await fetch('/api/pergunta', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ prompt })
